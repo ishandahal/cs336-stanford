@@ -37,3 +37,42 @@ class Linear(nn.Module):
         return torch.nn.init.trunc_normal_(
             weights, mean=0, std=std, a=left_cutoff, b=right_cutoff
         )
+
+
+class Embedding(nn.Module):
+    def __init__(
+        self,
+        num_embedding: int,
+        embedding_dim: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.embedding_layer = nn.Parameter(
+            self._init_model(num_embedding, embedding_dim, device=device, dtype=dtype)
+        )
+
+    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+
+        embs = self.embedding_layer[
+            token_ids
+        ]  # Batch size * Sequence length * Embedding dim
+        return embs
+
+    def _init_model(
+        self,
+        num_embedding: int,
+        embedding_dim: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> torch.Tensor:
+        left_cutoff = -3
+        right_cutoff = 3
+        # Macbook "mps" did not like `empty`
+        # weights = torch.empty(
+        #     (num_embedding, embedding_dim), dtype=dtype, device=device
+        # )
+        weights = torch.zeros(
+            (num_embedding, embedding_dim), dtype=dtype, device=device
+        )
+        return torch.nn.init.trunc_normal_(weights, a=left_cutoff, b=right_cutoff)
