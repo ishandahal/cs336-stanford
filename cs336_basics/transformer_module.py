@@ -354,3 +354,31 @@ class MultiHeadedAttentionWithRope(nn.Module):
         result = rearrange(result, "b h s d -> b s (h d)", h=self.num_heads)
         final_projection = self.out_proj(result)
         return final_projection
+
+
+class TransformerBlock(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        theta: float,
+        max_seq_len: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.block = MultiHeadedAttentionWithRope(
+            d_model, num_heads, theta, max_seq_len, device=device, dtype=dtype
+        )
+        self.ff = SwiGlu(d_model, d_ff, device=device, dtype=dtype)
+        self.rms_ln = RMSLayerNorm(d_model=d_model, device=device, dtype=dtype)
+        self.rms_ln2 = RMSLayerNorm(d_model=d_model, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_norm = self.rms_ln(x)
+        x_mha = self.block(x_norm) + x  # residual connection
+
+        x_norm2 = self.rms_ln2(x_mha)
+        ff_proj = self.ff(x_norm2) + x_mha  # residual connection
+        return ff_proj
