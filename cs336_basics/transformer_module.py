@@ -238,3 +238,31 @@ class RotaryPositionalEmbedding(nn.Module):
         result[..., 1::2] = rotated_x2
 
         return result
+
+
+def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
+    max_val = torch.max(x)
+    x = x - max_val
+    x_exp = torch.exp(x)
+    return x_exp / x_exp.sum(dim=dim, keepdim=True)
+
+
+def scaled_dot_product_attention(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: torch.Tensor | None = None
+) -> torch.Tensor:
+    scale = q.shape[-1] ** 0.5
+    # Dotproduct between query and key
+    q_dot_k = einsum(
+        q, k, "... seq_len_q d_k, ... seq_len_k d_k -> ... seq_len_q seq_len_k"
+    )
+    q_dot_k_scaled = q_dot_k / scale
+    # Use the mask for causal self attention
+    if mask is not None:
+        q_dot_k_scaled = q_dot_k_scaled.masked_fill(~mask, float("-inf"))
+    attention_weights = softmax(q_dot_k_scaled, dim=-1)
+    attended_tokens = einsum(
+        attention_weights,
+        v,
+        "... seq_len_q seq_len_k, ... seq_len_k d_v -> ... seq_len_q d_v",
+    )
+    return attended_tokens
