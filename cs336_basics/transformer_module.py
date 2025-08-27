@@ -31,6 +31,7 @@ class Linear(nn.Module):
         std = variance**0.5
         left_cutoff = -3 * std
         right_cutoff = 3 * std
+        # Using torch.empty caused issues with macbook
         # weights = torch.empty((out_features, in_features), dtype=dtype, device=device)
         weights = torch.zeros((out_features, in_features), dtype=dtype, device=device)
         return torch.nn.init.trunc_normal_(
