@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from einops import einsum
+from einops import einsum, rearrange
 
 
 class Linear(nn.Module):
@@ -266,3 +266,91 @@ def scaled_dot_product_attention(
         "... seq_len_q seq_len_k, ... seq_len_k d_v -> ... seq_len_q d_v",
     )
     return attended_tokens
+
+
+class MultiHeadedAttentionWithRope(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        theta: float,
+        max_seq_len: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        assert d_model % num_heads == 0, "input dim not evenly divisible by num_heads"
+        super().__init__()
+        self.num_heads = num_heads
+        self.d_kqv = d_model // num_heads
+        self.key = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.query = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.value = Linear(d_model, d_model, device=device, dtype=dtype)
+        # self.combined_kqv = Linear(d_model, 3 * d_model)
+        self.out_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.theta = theta
+        self.max_seq_len = max_seq_len
+
+        # Instantiatie ROPE
+        self.rope = RotaryPositionalEmbedding(
+            theta=self.theta,
+            d_k=self.d_kqv,
+            max_seq_len=self.max_seq_len,
+            device=device,
+        )
+
+    def forward(
+        self, x: torch.Tensor, token_positions: torch.Tensor | None = None
+    ) -> torch.Tensor:
+
+        batch, sequence, d_model = x.shape
+        k_w = self.key.get_parameter("linear_layer")
+        q_w = self.query.get_parameter("linear_layer")
+        v_w = self.value.get_parameter("linear_layer")
+        # combined_qkv_weights = torch.stack([k_w, q_w, v_w], dim=0)
+        # combined_qkv = einsum(x, combined_qkv_weights, "b s d, kqv k d -> b s kqv k")
+        # key, query, value = rearrange(combined_qkv, "b s n d_m -> n b s d_m")
+
+        # workaround for 'mps'
+        # Combine weights: (d_model, 3 * d_out)
+        combined_weight = torch.cat([k_w.T, q_w.T, v_w.T], dim=1)
+
+        # Single projection: (b, s, d_model) @ (d_model, 3 * d_out) = (b, s, 3 * d_out)
+        combined_qkv = x @ combined_weight  # same as F.linear(x, combined_weight)
+
+        # Reshape to (b, s, 3, d_out)
+        d_out = combined_qkv.size(-1) // 3
+        combined_qkv = combined_qkv.view(batch, sequence, 3, d_out)
+
+        # Rearrange to (3, b, s, d_out), then split
+        qkv_rearranged = combined_qkv.permute(2, 0, 1, 3)  # (3, b, s, d_out)
+        key, query, value = qkv_rearranged.unbind(0)  # 3 x (b, s, d_out)
+
+        key = rearrange(
+            key,
+            "b s (h d) -> b h s d",
+            h=self.num_heads,
+        )
+        key = self.rope(key, token_positions)  # Applying positional embeddings
+
+        query = rearrange(
+            query,
+            "b s (h d) -> b h s d",
+            h=self.num_heads,
+        )
+        query = self.rope(query, token_positions)  # Applying positional embeddings
+
+        value = rearrange(
+            value,
+            "b s (h d) -> b h s d",
+            h=self.num_heads,
+        )
+
+        mask = torch.tril(
+            torch.ones((sequence, sequence), dtype=torch.bool, device=x.device)
+        )
+        result = scaled_dot_product_attention(
+            query, key, value, mask
+        )  # batch num_head sequence head_dim
+        result = rearrange(result, "b h s d -> b s (h d)", h=self.num_heads)
+        final_projection = self.out_proj(result)
+        return final_projection
