@@ -76,3 +76,27 @@ class Embedding(nn.Module):
             (num_embedding, embedding_dim), dtype=dtype, device=device
         )
         return torch.nn.init.trunc_normal_(weights, a=left_cutoff, b=right_cutoff)
+
+
+class RMSLayerNorm(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        eps: float = 1e-5,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.d_model = d_model
+        self.eps = eps
+        self.gain = nn.Parameter(torch.zeros(d_model, device=device, dtype=dtype))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        in_dtype = x.dtype
+        # Using higher precision
+        x = x.to(torch.float32)
+        gain = self.gain.to(torch.float32)
+        root_mean_square = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True)) + self.eps
+        rms_norm = x / root_mean_square * gain
+        # Return to original dtype
+        return rms_norm.to(in_dtype)
