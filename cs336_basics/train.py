@@ -55,3 +55,24 @@ def evaluate_validation(model, args):
     print(f"Time elapsed for validation eval: {elapsed_seconds(start, end)}")
     # Average loss
     return running_loss / steps
+
+
+def get_model(args):
+    return TransformerModel(
+        vocab_size=args.vocab_size,
+        context_length=args.context_length,
+        d_model=args.d_model,
+        num_layers=args.num_layers,
+        num_heads=args.num_heads,
+        d_ff=args.d_ff,
+        device=args.device,
+        dtype=args.dtype,
+        theta=args.theta,
+    )
+
+
+def get_tokenizer():
+    vocab_filepath = "data/bpe_tiny_stories_vocab_10k.pkl"
+    merges_filepath = "data/bpe_tiny_stories_merges_10k.pkl"
+    special_tokens = ["<|endoftext|>"]
+    return Tokenizer.from_files(vocab_filepath, merges_filepath, special_tokens)
