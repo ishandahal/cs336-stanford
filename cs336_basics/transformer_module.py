@@ -374,14 +374,16 @@ class TransformerBlock(nn.Module):
             d_model, num_heads, theta, max_seq_len, device=device, dtype=dtype
         )
         self.ff = SwiGlu(d_model, d_ff, device=device, dtype=dtype)
-        self.rms_ln = RMSLayerNorm(d_model=d_model, device=device, dtype=dtype)
-        self.rms_ln2 = RMSLayerNorm(d_model=d_model, device=device, dtype=dtype)
+        # self.rms_ln = RMSLayerNorm(d_model=d_model, device=device, dtype=dtype)
+        # self.rms_ln2 = RMSLayerNorm(d_model=d_model, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x_norm = self.rms_ln(x)
+        # x_norm = self.rms_ln(x)
+        x_norm = x
         x_mha = self.block(x_norm) + x  # residual connection
 
-        x_norm2 = self.rms_ln2(x_mha)
+        # x_norm2 = self.rms_ln2(x_mha)
+        x_norm2 = x_mha
         ff_proj = self.ff(x_norm2) + x_mha  # residual connection
         return ff_proj
 
@@ -413,14 +415,14 @@ class TransformerModel(nn.Module):
             )
             for _ in range(num_layers)
         )
-        self.ln = RMSLayerNorm(d_model, dtype=dtype, device=device)
+        # self.ln = RMSLayerNorm(d_model, dtype=dtype, device=device)
         self.out_proj = Linear(d_model, vocab_size, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.embedding(x)
         for transformer_block in self.lm:
             x = transformer_block(x)
-        x = self.ln(x)
+        # x = self.ln(x)
         logits = self.out_proj(x)
         # probs = softmax(logits, dim=-1)
         return logits

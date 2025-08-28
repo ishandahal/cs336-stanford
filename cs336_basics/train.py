@@ -79,10 +79,10 @@ def get_tokenizer():
 
 
 def train(args):
-    # run = wandb.init(
-    #     project="gpt-2-run-layer-norm-ablation-v0.0",  # Specify project
-    #     config=args,  # Track hyperparameters and metadata
-    # )
+    run = wandb.init(
+        project="gpt-2-run-layer-norm-ablation-v0.0",  # Specify project
+        config=args,  # Track hyperparameters and metadata
+    )
 
     model = get_model(args)
     model = torch.compile(model, backend="aot_eager")  # For macbook
@@ -104,13 +104,15 @@ def train(args):
     for i in range(args.steps):
 
         # Calculate current learning rate
-        current_lr = learning_rate_scheduler(
-            i,
-            lr_max=args.learning_rate_max,
-            lr_min=args.learning_rate_min,
-            warmup_iters=warmup_iters,
-            cosine_annealing_iters=args.steps,
-        )
+        # current_lr = learning_rate_scheduler(
+        #     i,
+        #     lr_max=args.learning_rate_max,
+        #     lr_min=args.learning_rate_min,
+        #     warmup_iters=warmup_iters,
+        #     cosine_annealing_iters=args.steps,
+        # )
+        current_lr = 1e-8
+
         # Update all parameter group
         for param_group in optimizer.param_groups:
             param_group["lr"] = current_lr
@@ -143,6 +145,11 @@ def train(args):
 
         # Accumulate loss
         running_loss += loss.item()
+
+        print(
+            f"Iteration: {i} | current learning rate: {current_lr} | current iteration training loss {loss}"
+        )
+
         if not (i % 100):
             model.eval()
             average_val_loss = evaluate_validation(model, args)
@@ -167,14 +174,14 @@ def train(args):
                 # Collect generated samples
                 generated_samples.append(response)
             # Logging loss to weights and biases
-            # run.log(
-            #     {
-            #         "train_loss": running_loss / i,
-            #         "validation_loss": average_val_loss,
-            #         "validation_perplexity": perplexity,
-            #     },
-            #     step=i,
-            # )
+            run.log(
+                {
+                    "train_loss": running_loss / i,
+                    "validation_loss": average_val_loss,
+                    "validation_perplexity": perplexity,
+                },
+                step=i,
+            )
 
         # Serialize model and optimizer states
         # if not (i % 1000):
@@ -184,14 +191,14 @@ def train(args):
         #     )  # i is subtraction by 1 above for ease
 
     # Weights and bias specific logging
-    # table = wandb.Table(["step", "prompt", "output"])
-    # for j, (prompt, response) in enumerate(
-    #     zip((prompt for _ in range(len(generated_samples))), generated_samples)
-    # ):
-    #     table.add_data(j, prompt, response)
-    #
-    # wandb.log({"generated text samples": table})
-    # run.finish()
+    table = wandb.Table(["step", "prompt", "output"])
+    for j, (prompt, response) in enumerate(
+        zip((prompt for _ in range(len(generated_samples))), generated_samples)
+    ):
+        table.add_data(j, prompt, response)
+
+    wandb.log({"generated text samples": table})
+    run.finish()
     print("Training complete")
 
 
