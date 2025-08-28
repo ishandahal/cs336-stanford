@@ -27,3 +27,31 @@ def get_batch(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     x = np.memmap(path, dtype=np.uint16)
     return data_loading(x, batch_size, context_length, deterministic_sampling, device)
+
+
+def evaluate_validation(model, args):
+    """Evaluate the model on validation set"""
+    # Track time for validation runs
+    start = time.time()
+    running_loss = 0
+    steps = args.validation_steps
+    rng = random.Random(42)
+
+    # print("Evaluation on validation: ")
+    for _ in range(steps):
+        # print(f"Eval: iteration {i}")
+        with torch.no_grad():
+            x, y = get_batch(
+                args.valid_path,
+                args.batch_size,
+                args.context_length,
+                deterministic_sampling=rng,
+                device=args.device,
+            )
+            logits = model(x)
+            loss = cross_entropy(logits, y)
+            running_loss += loss.item()
+    end = time.time()
+    print(f"Time elapsed for validation eval: {elapsed_seconds(start, end)}")
+    # Average loss
+    return running_loss / steps
