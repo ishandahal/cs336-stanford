@@ -1,3 +1,5 @@
+from typing import Callable, Optional, Tuple
+
 import torch
 import torch.nn as nn
 from einops import einsum, rearrange
@@ -302,7 +304,7 @@ class MultiHeadedAttentionWithRope(nn.Module):
         self, x: torch.Tensor, token_positions: torch.Tensor | None = None
     ) -> torch.Tensor:
 
-        batch, sequence, d_model = x.shape
+        batch, sequence, _ = x.shape
         k_w = self.key.get_parameter("linear_layer")
         q_w = self.query.get_parameter("linear_layer")
         v_w = self.value.get_parameter("linear_layer")
@@ -422,3 +424,50 @@ class TransformerModel(nn.Module):
         logits = self.out_proj(x)
         # probs = softmax(logits, dim=-1)
         return logits
+
+
+class AdamW(torch.optim.Optimizer):
+    def __init__(
+        self,
+        params,
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.95),
+        eps: float = 1e-8,
+        weight_decay: float = 1e-3,
+    ) -> None:
+        if lr < 0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        defaults = {
+            "lr": lr,
+            "betas": betas,
+        }
+        self.weight_decay = weight_decay
+        self.eps = eps
+        super().__init__(params, defaults)
+
+    def step(self, closure: Optional[Callable] = None):
+        loss = None if closure is None else closure()
+        for group in self.param_groups:
+            lr = group["lr"]
+            beta1, beta2 = group["betas"]
+
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+
+                state = self.state[p]
+                t = state.get("t", 1)  # Current iteration number or default
+                grad = p.grad.data
+                first_moment = state.get("first_moment", torch.zeros_like(grad))
+                second_moment = state.get("second_moment", torch.zeros_like(grad))
+                first_moment = (first_moment * beta1) + ((1 - beta1) * grad)
+                second_moment = (second_moment * beta2) + ((1 - beta2) * (grad**2))
+                num = (1 - (beta2**t)) ** 0.5
+                denom = 1 - (beta1**t)
+                lr_t = lr * (num / denom)  # learning rate for this iteration
+                p.data -= lr_t * (first_moment / (torch.sqrt(second_moment) + self.eps))
+                p.data -= lr * self.weight_decay * p.data
+                state["t"] = t + 1
+                state["first_moment"] = first_moment
+                state["second_moment"] = second_moment
+        return loss
