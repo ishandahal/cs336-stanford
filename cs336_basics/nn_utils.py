@@ -1,6 +1,7 @@
 import math
+import os
 import random
-from typing import Iterable
+from typing import IO, BinaryIO, Iterable
 
 import numpy as np
 import torch
@@ -90,3 +91,30 @@ def data_loading(
     ids = torch.tensor(np.array(ids), device=device, dtype=torch.long)
     labels = torch.tensor(np.array(labels), device=device, dtype=torch.long)
     return ids, labels
+
+
+def save_checkpoint(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    iteration: int,
+    out: str | os.PathLike | BinaryIO | IO[bytes],
+) -> None:
+    "Save model checkpoint"
+    obj = {
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "iteration": iteration,
+    }
+    torch.save(obj, out)
+
+
+def load_checkpoint(
+    src: str | os.PathLike | BinaryIO | IO[bytes],
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+) -> int:
+    "Load model checkpoint"
+    obj = torch.load(src)
+    model.load_state_dict(obj["model_state"])
+    optimizer.load_state_dict(obj["optimizer_state"])
+    return obj["iteration"]
