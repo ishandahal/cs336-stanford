@@ -146,7 +146,7 @@ def train(args):
         if not (i % 100):
             model.eval()
             average_val_loss = evaluate_validation(model, args)
-            perplexity = torch.exp(average_val_loss)
+            perplexity = torch.exp(torch.tensor(average_val_loss))
 
             print(
                 f"iteration: {i} | training running loss: {running_loss / (i)} | average val loss: {average_val_loss} | average perplexity: {perplexity}"
