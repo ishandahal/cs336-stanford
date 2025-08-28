@@ -5,6 +5,7 @@ from typing import IO, BinaryIO, Iterable
 
 import numpy as np
 import torch
+from einops import rearrange
 
 
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
