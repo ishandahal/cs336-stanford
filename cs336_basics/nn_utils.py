@@ -118,3 +118,108 @@ def load_checkpoint(
     model.load_state_dict(obj["model_state"])
     optimizer.load_state_dict(obj["optimizer_state"])
     return obj["iteration"]
+
+
+def gpt2_traininable_param_count(d_model, vocab_size, num_layers, d_ff):
+    # Embedding layer
+    embed = d_model * vocab_size
+
+    # Transformer block
+    layer_norm1 = d_model
+    # Attention
+    qkv = 3 * d_model * d_model
+    o_proj = d_model * d_model
+    attn = qkv + o_proj
+
+    layer_norm2 = d_model
+    layer_norm = layer_norm1 + layer_norm2
+    # FF
+    ff1 = d_model * d_ff
+    ff2 = d_model * d_ff
+    ff3 = d_ff * d_model
+    ff = ff1 + ff2 + ff3
+
+    mha = layer_norm + attn + ff
+
+    # layer norm before final projection matrix to vocab_size
+    layer_norm_final = d_model
+    # output_projection = d_model * vocab_size # No need to count this because of weight tying
+
+    params = embed + (num_layers * mha) + layer_norm_final
+    return params
+
+
+def get_parameter_count(d_model, num_layers, vocab_size):
+
+    rms_norm = d_model
+
+    # Attention
+    qkv = d_model * d_model * 3
+    o_proj = d_model * d_model
+    attention = qkv + o_proj
+
+    # ff
+    w1 = d_model * d_model * 4  # d_ff = 4 * d_model
+    w2 = d_model * d_model * 4
+    ff = w1 + w2
+
+    output = d_model * vocab_size  # Same as embedding (weight tying)
+
+    return (rms_norm + attention + ff) * num_layers + rms_norm + output
+
+
+def get_activation_count(
+    batch_size, sequence_len, d_model, n_heads, vocab_size, num_layers
+):
+    tokens = batch_size * sequence_len * d_model
+    na = batch_size * n_heads * sequence_len * sequence_len
+    nl = batch_size * sequence_len * vocab_size
+
+    rms_norm = tokens
+
+    # Attention
+    qkv = tokens
+    qdotk = 2 * tokens
+    softmax = na
+    pv = tokens + na
+    o_proj = tokens
+    attention = qkv + qdotk + softmax + pv + o_proj
+
+    # Ff
+    ff1 = tokens
+    silu = 4 * tokens
+    ff2 = 4 * tokens
+    ff = ff1 + silu + ff2
+
+    model_acts = num_layers * (attention + rms_norm + ff)
+    embedding = tokens
+    cross_entropy = nl
+
+    return model_acts + embedding + cross_entropy
+
+
+def gpt2_matmul_flops(d_model, context_length, vocab_size, num_layers):
+    # Tranformer block matmuls
+    # Attention
+    qkv_matmul = (
+        3 * 2 * (context_length * d_model * d_model)
+    )  # qkv requires 3 matrix multiplies and 2 for matmul flops
+    q_dot_t = 2 * (context_length * d_model * d_model)
+    qt_v = 2 * (context_length * context_length * d_model)
+    concat_o_proj = 2 * (context_length * d_model * d_model)
+    attention_flops = qkv_matmul + q_dot_t + qt_v + concat_o_proj
+
+    # FeedForward
+    ff1 = 2 * (context_length * d_model * d_model * 4)  # d_ff == d_model * 4 typically
+    ff2 = 2 * (context_length * d_model * d_model * 4)
+    ff3 = 2 * (context_length * d_model * d_model * 4)
+    ff = ff1 + ff2 + ff3
+
+    transformer_block_flops = attention_flops + ff
+
+    # Projection to vocab_size
+    output_proj = 2 * (context_length * d_model * vocab_size)
+
+    total_flops = (num_layers * transformer_block_flops) + output_proj
+
+    return total_flops
