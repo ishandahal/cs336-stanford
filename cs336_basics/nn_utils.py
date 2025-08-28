@@ -120,6 +120,69 @@ def load_checkpoint(
     return obj["iteration"]
 
 
+def decoding(
+    tokenizer,
+    prompt: str,
+    context_length: int,
+    max_length: int,
+    model: torch.nn.Module,
+    temp: float,
+    top_p: float,
+    device: torch.device,
+) -> str:
+    eot_token = "<|endoftext|>"
+    eot_token_id = tokenizer.encode(eot_token)[0]
+
+    ids = tokenizer.encode(prompt)
+    ids = ids[-context_length:]
+    ids = torch.tensor(ids, device=device, dtype=torch.long)
+    ids = rearrange(ids, "seq -> 1 seq")
+
+    print(f"Prompt: {prompt}")
+    print("Output:")
+
+    result = ""
+
+    counter = 0
+    with torch.no_grad():
+        while True:
+            logits = model(ids)
+            # Temperature scaling the logits
+            probs = torch.softmax(logits / temp, dim=-1)
+            prob_next_token = probs[0, -1, :]
+            # most_likely = torch.argmax(next_token_prob, dim=-1)
+            sorted_values, sorted_indices = prob_next_token.sort(
+                dim=-1, descending=True
+            )
+            # Keep only top p probability choices
+            cutoff_mask = torch.cumsum(sorted_values, dim=-1) < top_p
+            cutoff_mask[0] = True  # Make sure we always have a choice
+            top_p_indices = sorted_indices[cutoff_mask]
+            top_p_probs = prob_next_token[top_p_indices]
+            top_p_probs = top_p_probs / top_p_probs.sum()
+
+            sample_idx = torch.multinomial(top_p_probs, num_samples=1)
+            sample = top_p_indices[sample_idx]
+            next_token = tokenizer.decode([sample.item()])
+            if sample.item() == eot_token_id:
+                break
+            if counter > max_length:
+                break
+            result += next_token
+            print(next_token, end="")
+
+            counter += 1
+
+            ids = torch.cat([ids, sample[None]], dim=1)
+
+            # If the sequence of the text is longer than the context_length
+            # only keep the last context_length tokens
+            if ids.shape[1] > context_length:
+                ids = ids[:, -context_length:]
+    print("\n")
+    return result
+
+
 def gpt2_traininable_param_count(d_model, vocab_size, num_layers, d_ff):
     # Embedding layer
     embed = d_model * vocab_size
