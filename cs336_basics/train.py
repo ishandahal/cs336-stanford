@@ -263,3 +263,13 @@ def parse_args():
     parser.add_argument("--checkpoint-path", type=str, help="Path to save checkpoint")
 
     return parser.parse_args()
+
+
+if __name__ == "__main__":
+    start = time.time()
+    args = parse_args()
+    train(args)
+    end = time.time()
+    print(
+        f"total time from start to finish using {args.device}: {elapsed_seconds(start, end)}"
+    )
