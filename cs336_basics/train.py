@@ -193,3 +193,73 @@ def train(args):
     # wandb.log({"generated text samples": table})
     # run.finish()
     print("Training complete")
+
+
+def parse_device(s: str):
+    try:
+        return torch.device(s)
+    except Exception as e:
+        raise argparse.ArgumentTypeError(f"invalid device type '{s}' : {e}")
+
+
+def parse_datatype(s: str):
+    mapping = {
+        "float32": torch.float32,
+        "float": torch.float32,
+        "fp32": torch.float32,
+        "float16": torch.float16,
+        "fp16": torch.float16,
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+    }
+    key = s.lower()
+    if key in mapping:
+        return mapping[key]
+    raise argparse.ArgumentTypeError(f"Unsupported dtype: {s}")
+
+
+def parse_args():
+    """Parse command line arguments for training configuration"""
+    parser = argparse.ArgumentParser(description="Pytorch training script")
+
+    parser.add_argument("--vocab-size", type=int, help="Vocab size of the model")
+    parser.add_argument(
+        "--context-length", type=int, help="Context length of the model"
+    )
+    parser.add_argument("--d-model", type=int, help="Dimension of the Embeddings")
+    parser.add_argument("--d-ff", type=int, help="Dimension of the projection layer")
+    parser.add_argument("--num-layers", type=int, help="Number of Attention blocks")
+    parser.add_argument(
+        "--num-heads", type=int, help="Number of heads in the attention block"
+    )
+    parser.add_argument(
+        "--theta", type=float, default=10000, help="theta parameter for rope"
+    )
+
+    parser.add_argument("--batch-size", type=int, help="Number of sequences in a batch")
+    parser.add_argument("--steps", type=int, help="Number of gradient updates")
+    parser.add_argument(
+        "--validation-steps", type=int, help="Number of batches to validate"
+    )
+    parser.add_argument("--learning-rate-min", type=float, help="Learning rate min")
+    parser.add_argument("--learning-rate-max", type=float, help="Learning rate max")
+    parser.add_argument("--weight-decay", type=float, help="Weight decay")
+    parser.add_argument(
+        "--device", type=parse_device, help="Device to run on: 'cpu', 'mps', 'cuda' ..."
+    )
+    parser.add_argument(
+        "--dtype", type=parse_datatype, help="Data type to use float16, float32, etc"
+    )
+
+    parser.add_argument(
+        "--max-length", type=int, help="Maximum length of sequence to generate"
+    )
+    parser.add_argument(
+        "--temp", type=float, help="Temperature to control randomness of the output"
+    )
+    parser.add_argument("--top-p", type=float, help="p value for top p sampling")
+    parser.add_argument("--train-path", type=str, help="Path to training data")
+    parser.add_argument("--valid-path", type=str, help="Path to validation data")
+    parser.add_argument("--checkpoint-path", type=str, help="Path to save checkpoint")
+
+    return parser.parse_args()
