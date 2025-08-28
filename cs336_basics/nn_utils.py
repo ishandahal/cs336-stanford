@@ -60,3 +60,33 @@ def gradient_clipping(
     for parameter in parameter_list:
         if parameter.requires_grad:
             parameter.grad *= max_norm / (l2_norm + eps)
+
+
+def data_loading(
+    x: np.array,
+    batch_size: int,
+    context_length: int,
+    deterministic_sampling: random.Random | None = None,
+    device: torch.device | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+
+    size = len(x)
+
+    # We also want the labels which requires an extra offset
+    ceil = size - context_length - 1
+
+    rng = deterministic_sampling if deterministic_sampling is not None else random
+
+    ids, labels = [], []
+    for _ in range(batch_size):
+        start_index = rng.randint(0, ceil)
+        end_index = start_index + context_length
+        # if train_on_one_batch:
+        # print(f"start and end indices: {start_index}, {end_index}")
+        ids.append(x[start_index:end_index])
+        labels.append(x[start_index + 1 : end_index + 1])
+    # Torch gave a warning that converting list to np.array to tensor is faster
+    # Ids are saved as uint16 which is not supported in torch so need to convert to long
+    ids = torch.tensor(np.array(ids), device=device, dtype=torch.long)
+    labels = torch.tensor(np.array(labels), device=device, dtype=torch.long)
+    return ids, labels
