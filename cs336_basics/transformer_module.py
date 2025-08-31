@@ -146,7 +146,9 @@ class SwiGlu(nn.Module):
         right_cutoff = 3
         # weights = torch.empty((d_in, d_out), dtype=dtype, device=device)
         weights = torch.zeros((d_in, d_out), dtype=dtype, device=device)
-        return torch.nn.init.trunc_normal_(weights, a=left_cutoff, b=right_cutoff)
+        return (
+            torch.nn.init.trunc_normal_(weights, a=left_cutoff, b=right_cutoff) * 0.01
+        )
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -258,10 +260,15 @@ def scaled_dot_product_attention(
         q, k, "... seq_len_q d_k, ... seq_len_k d_k -> ... seq_len_q seq_len_k"
     )
     q_dot_k_scaled = q_dot_k / scale
+
+    # Clamping at [-30, 30] for numerical stability (started getting nans)
+    q_dot_k_scaled = torch.clamp(q_dot_k_scaled, min=-30, max=30)
+
     # Use the mask for causal self attention
     if mask is not None:
         q_dot_k_scaled = q_dot_k_scaled.masked_fill(~mask, float("-inf"))
     attention_weights = softmax(q_dot_k_scaled, dim=-1)
+
     attended_tokens = einsum(
         attention_weights,
         v,
