@@ -91,7 +91,7 @@ class RMSLayerNorm(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.eps = eps
-        self.gain = nn.Parameter(torch.zeros(d_model, device=device, dtype=dtype))
+        self.gain = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         in_dtype = x.dtype
@@ -378,11 +378,20 @@ class TransformerBlock(nn.Module):
         self.rms_ln2 = RMSLayerNorm(d_model=d_model, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x_norm = self.rms_ln(x)
-        x_mha = self.block(x_norm) + x  # residual connection
+        # Pre norm
+        # x_norm = self.rms_ln(x)
+        # x_mha = self.block(x_norm) + x  # residual connection
+        # Post norm
+        # x_ln = self.rms_ln(x + self.block(x))
+        x_attn = self.block(x)
+        x_ln = x + x_attn
+        x_ln = self.rms_ln(x_ln)
 
-        x_norm2 = self.rms_ln2(x_mha)
-        ff_proj = self.ff(x_norm2) + x_mha  # residual connection
+        # Pre norm
+        # x_norm2 = self.rms_ln2(x_mha)
+        # ff_proj = self.ff(x_norm2) + x_mha  # residual connection
+        # Post norm
+        ff_proj = self.rms_ln2(x_ln + self.ff(x_ln))
         return ff_proj
 
 
