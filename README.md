@@ -1,4 +1,12 @@
-# CS336 Spring 2025 Assignment 1: Basics
+# CS336 Spring 2025 Assignment 1: Ablations with no normalization within attention block
+
+The purpose of this ablation experiment was to observe the training behavior of the model without layer normalization. 
+
+It was immediately obvious that the training would not go well with previously optimal parameters and configurations. The loss climbed reach null after a few iterations of training. Looking at the activations I found that the final linear projection of the SWIGLU was unusually large. The default initialization (Xaviar initialization) was not adequate to contain the activations in a reasonable range. Scaling the initialization parameters be a factor of 0.01 was sufficient to bring the activations to a reasonable range. This stabilized training in the early iterations but the loss eventually climbed to null. It was also not possible to train at a lower learning rate. 
+
+Next I observed that the output of the attention computation before exponentiation eventually reached levels at or above numerical stability. Exponentiation operation with those outputs was causing nan's to appear. The fix here was to clamp the output before exponentiation at the range of [-30,30]. This was sufficient eliminate the numerical instability and make progress in training the model. 
+
+These two fixes allowed the model to train in a stable manner without layer normalization. 
 
 For a full description of the assignment, see the assignment handout at
 [cs336_spring2025_assignment1_basics.pdf](./cs336_spring2025_assignment1_basics.pdf)
